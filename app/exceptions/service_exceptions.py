@@ -20,7 +20,7 @@ def handle_conflict_error(entity_type: str, entity_id: str):
     logger.warning(f"Попытка создать {entity_type} для существующего {entity_id}")
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
-        detail=f"{entity_type} с указанным идентификатором уже существует"
+        detail=f"{entity_type} с указанным номером телефона уже существует"
     )
 
 def handle_update_error(entity_type: str, entity_id: str, operation: str):

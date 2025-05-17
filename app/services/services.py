@@ -2,8 +2,9 @@ import redis
 from typing import Optional, Tuple
 from app.config.config import settings
 from app.utils.logging import logger
+from app.services.interfaces import StorageInterface
 
-class RedisService:
+class RedisService(StorageInterface):
     
     def __init__(self):
         try:

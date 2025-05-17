@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config.config import settings
-from app.routers.routers import router, get_redis_service
+from app.routers.routers import router, get_storage_service
 from app.services.services import RedisService
 from app.utils.logging import logger, setup_logging
 from app.exceptions.handlers import validation_exception_handler, http_exception_handler, global_exception_handler
@@ -39,7 +39,7 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
 @app.get("/health", response_model=dict, summary="Проверка работоспособности сервиса", tags=["Health"])
-async def health_check(redis_service: RedisService = Depends(get_redis_service)):
+async def health_check(redis_service: RedisService = Depends(get_storage_service)):
     redis_status = await redis_service.ping()
     
     if not redis_status:
