@@ -1,10 +1,13 @@
-from fastapi import FastAPI, Request, Depends, status
+from fastapi import FastAPI, Request, Depends, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config.config import settings
 from app.routers.routers import router, get_redis_service
 from app.services.services import RedisService
 from app.utils.logging import logger, setup_logging
+from app.exceptions.handlers import validation_exception_handler, http_exception_handler, global_exception_handler
 import time
 
 setup_logging()
@@ -31,13 +34,9 @@ async def log_requests(request: Request, call_next):
     logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.4f}s")
     return response
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Необработанное исключение: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Внутренняя ошибка сервера"},
-    )
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, global_exception_handler)
 
 @app.get("/health", response_model=dict, summary="Проверка работоспособности сервиса", tags=["Health"])
 async def health_check(redis_service: RedisService = Depends(get_redis_service)):

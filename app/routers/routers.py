@@ -1,7 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends, Path, status
-from app.models.models import PhoneAddressData,SuccessResponse, PhoneAddressUpdateData
+from fastapi import APIRouter, Depends, Path, Query, status
+from app.models.models import PhoneAddressData, SuccessResponse, PhoneAddressUpdateData
 from app.services.services import RedisService
 from app.utils.logging import logger
+from app.exceptions.service_exceptions import (
+    handle_service_error, 
+    handle_not_found_error, 
+    handle_conflict_error, 
+    handle_update_error
+)
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
 
@@ -17,18 +23,10 @@ async def get_phone_address(
     address, success = await redis_service.get_address_by_phone(phone)
     
     if not success:
-        logger.error(f"Ошибка сервиса при получении адреса для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Сервис временно недоступен"
-        )
+        handle_service_error("Redis", "получении адреса", phone)
     
     if not address:
-        logger.info(f"Адрес для телефона {phone} не найден")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Адрес не найден"
-        )
+        handle_not_found_error("Адрес", phone)
     
     logger.info(f"Адрес для телефона {phone} успешно получен")
     return {"phone": phone, "address": address}
@@ -43,26 +41,14 @@ async def create_phone_address(
     existing_address, success = await redis_service.get_address_by_phone(data.phone)
     
     if not success:
-        logger.error(f"Ошибка сервиса при проверке существования телефона: {data.phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Сервис временно недоступен"
-        )
+        handle_service_error("Redis", "проверке существования телефона", data.phone)
     
     if existing_address:
-        logger.warning(f"Попытка создать запись для существующего телефона: {data.phone}")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, 
-            detail="Запись с указанным номером телефона уже существует"
-        )
+        handle_conflict_error("Запись", data.phone)
     
     success = await redis_service.save_phone_address(data.phone, data.address)
     if not success:
-        logger.error(f"Ошибка при сохранении данных для телефона: {data.phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Ошибка при сохранении данных"
-        )
+        handle_update_error("данных", data.phone, "сохранении")
     
     logger.info(f"Запись для телефона {data.phone} успешно создана")
     return {"status": "success", "message": "Данные успешно сохранены"}
@@ -77,36 +63,20 @@ async def update_phone_address(
     address, success = await redis_service.get_address_by_phone(phone)
     
     if not success:
-        logger.error(f"Ошибка сервиса при обновлении записи для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Сервис временно недоступен"
-        )
+        handle_service_error("Redis", "обновлении записи", phone)
     
     if not address:
-        logger.info(f"Запись для телефона {phone} не найдена при попытке обновления")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Запись с указанным номером телефона не найдена"
-        )
+        handle_not_found_error("Запись с указанным номером телефона", phone, "обновления")
 
     if phone != data.phone:
         logger.info(f"Изменение номера телефона с {phone} на {data.phone}")
         delete_success = await redis_service.delete_phone_address(phone)
         if not delete_success:
-            logger.error(f"Ошибка при удалении старой записи для телефона: {phone}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-                detail="Ошибка при обновлении данных"
-            )
+            handle_update_error("старой записи", phone, "удалении")
 
     success = await redis_service.save_phone_address(data.phone, data.address)
     if not success:
-        logger.error(f"Ошибка при сохранении новых данных для телефона: {data.phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Ошибка при обновлении данных"
-        )
+        handle_update_error("новых данных", data.phone, "сохранении")
     
     logger.info(f"Запись для телефона {data.phone} успешно обновлена")
     return {"status": "success", "message": "Запись успешно обновлена"}
@@ -121,26 +91,14 @@ async def partial_update_phone_address(
     address, success = await redis_service.get_address_by_phone(phone)
     
     if not success:
-        logger.error(f"Ошибка сервиса при частичном обновлении адреса для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Сервис временно недоступен"
-        )
+        handle_service_error("Redis", "частичном обновлении адреса", phone)
     
     if not address:
-        logger.info(f"Запись для телефона {phone} не найдена при попытке частичного обновления")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Запись с указанным номером телефона не найдена"
-        )
+        handle_not_found_error("Запись с указанным номером телефона", phone, "частичного обновления")
     
     success = await redis_service.save_phone_address(phone, data.address)
     if not success:
-        logger.error(f"Ошибка при сохранении нового адреса для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Ошибка при обновлении данных"
-        )
+        handle_update_error("нового адреса", phone, "сохранении")
     
     logger.info(f"Адрес для телефона {phone} успешно обновлен")
     return {"status": "success", "message": "Адрес успешно обновлен"}
@@ -154,26 +112,14 @@ async def delete_phone_address(
     address, success = await redis_service.get_address_by_phone(phone)
     
     if not success:
-        logger.error(f"Ошибка сервиса при удалении записи для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Сервис временно недоступен"
-        )
+        handle_service_error("Redis", "удалении записи", phone)
     
     if not address:
-        logger.info(f"Запись для телефона {phone} не найдена при попытке удаления")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Запись с указанным номером телефона не найдена"
-        )
+        handle_not_found_error("Запись с указанным номером телефона", phone, "удаления")
     
     success = await redis_service.delete_phone_address(phone)
     if not success:
-        logger.error(f"Ошибка при удалении записи для телефона: {phone}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
-            detail="Ошибка при удалении данных"
-        )
+        handle_update_error("записи", phone, "удалении")
     
     logger.info(f"Запись для телефона {phone} успешно удалена")
     return {"status": "success", "message": "Запись успешно удалена"}
